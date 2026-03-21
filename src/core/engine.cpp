@@ -78,6 +78,8 @@ bool Engine::init(const EngineConfig& config) {
         if (!fx_processor_.load_slot(0, config.dsp_path))
             fprintf(stderr, "[ENGINE] DSP load failed: %s — demo mode\n",
                     config.dsp_path.c_str());
+        else
+            audio_.activate_input();
     }
 
     // ── Chiptune ──────────────────────────────────────────────────────
@@ -87,7 +89,7 @@ bool Engine::init(const EngineConfig& config) {
     // ── Audio ────────────────────────────────────────────────────────
     audio_.set_sample_rate(config.sample_rate);
     audio_.set_block_size(config.block_size);
-    audio_.set_channels(0, std::max(2, 2));
+    audio_.set_channels(2, std::max(2, 2));
 
     audio_.set_callback([this](const float* const* in, float* const* out,
                                 int n_ch, int n_frames) {
@@ -511,10 +513,12 @@ bool Engine::load_preset(const std::string& filename) {
     if (!preset_mgr_.load(filename, p)) return false;
 
     // Apply FX chain state
+    bool has_input_dsp = false;
     for (int i = 0; i < MAX_FX_SLOTS; ++i) {
         const auto& s = p.slots[i];
         if (!s.dsp_path.empty()) {
             fx_processor_.load_slot(i, s.dsp_path);
+            has_input_dsp = true;
         }
         fx_processor_.set_slot_bypassed(i, s.bypassed);
         fx_processor_.set_slot_wet_mix(i, s.wet_mix);
@@ -538,6 +542,8 @@ bool Engine::load_preset(const std::string& filename) {
     renderer_.bloom_intensity = p.post_fx.bloom_intensity;
     renderer_.vignette_enabled = p.post_fx.vignette;
     renderer_.barrel_enabled = p.post_fx.barrel;
+
+    if (has_input_dsp) audio_.activate_input();
 
     fprintf(stderr, "[ENGINE] Preset loaded: %s\n", p.name.c_str());
     return true;

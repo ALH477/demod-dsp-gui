@@ -172,7 +172,8 @@ bool AudioEngine::start(const std::string& client_name) {
                 PW_ID_ANY,
                 (pw_stream_flags)(PW_STREAM_FLAG_AUTOCONNECT |
                                   PW_STREAM_FLAG_MAP_BUFFERS |
-                                  PW_STREAM_FLAG_RT_PROCESS),
+                                  PW_STREAM_FLAG_RT_PROCESS |
+                                  PW_STREAM_FLAG_INACTIVE),  // Start paused
                 in_params, 1
             );
 
@@ -187,7 +188,7 @@ bool AudioEngine::start(const std::string& client_name) {
                 input_bufs_.resize(n_inputs_);
                 for (auto& buf : input_bufs_)
                     buf.resize(block_size_ * 2, 0.0f);
-                fprintf(stderr, "[AUDIO] Input stream: %d ch\n", n_inputs_);
+                fprintf(stderr, "[AUDIO] Input stream: %d ch (inactive)\n", n_inputs_);
             }
         }
     }
@@ -236,6 +237,23 @@ void AudioEngine::stop() {
     }
 }
 
+void AudioEngine::activate_input() {
+    if (!input_stream_) return;
+    input_active_.store(true, std::memory_order_release);
+    pw_stream_set_active(input_stream_, true);
+    fprintf(stderr, "[AUDIO] Input stream activated\n");
+}
+
+void AudioEngine::deactivate_input() {
+    if (!input_stream_) return;
+    input_active_.store(false, std::memory_order_release);
+    pw_stream_set_active(input_stream_, false);
+    // Clear ring buffer to avoid stale data
+    input_read_pos_.store(0, std::memory_order_relaxed);
+    input_write_pos_.store(0, std::memory_order_relaxed);
+    fprintf(stderr, "[AUDIO] Input stream deactivated\n");
+}
+
 void AudioEngine::pw_thread_func() {
     // Enable Flush-to-Zero and Denormals-Are-Zero on this thread.
     // Denormal floating-point numbers cause 10-100x slowdown in the
@@ -251,7 +269,8 @@ void AudioEngine::on_input_process(void* userdata) {
     auto* hd = static_cast<HookData*>(userdata);
     auto* engine = hd->engine;
 
-    if (!engine->input_stream_) return;
+    if (!engine->input_stream_ || !engine->input_active_.load(std::memory_order_relaxed))
+        return;
 
     struct pw_buffer* pwbuf = pw_stream_dequeue_buffer(engine->input_stream_);
     if (!pwbuf) return;

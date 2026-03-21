@@ -43,6 +43,11 @@ public:
     void stop();
     bool running() const { return running_.load(); }
 
+    // Input stream control — start paused, activate when DSP needs input
+    void activate_input();
+    void deactivate_input();
+    bool input_active() const { return input_active_.load(); }
+
     // Monitoring
     float cpu_load() const { return cpu_load_.load(); }
     int   xruns()    const { return xrun_count_.load(); }
@@ -70,6 +75,7 @@ private:
     AudioCallback callback_;
 
     std::atomic<bool>  running_{false};
+    std::atomic<bool>  input_active_{false};
     std::atomic<float> cpu_load_{0.0f};
     std::atomic<int>   xrun_count_{0};
 
