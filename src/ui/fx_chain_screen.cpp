@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <SDL2/SDL.h>
 
 namespace demod::ui {
 
@@ -83,6 +84,31 @@ void FXChainScreen::update(const input::InputManager& input, float dt) {
     if (std::fabs(ay) > 0.1f) {
         slots_[focused_].wet_mix = std::clamp(slots_[focused_].wet_mix + ay * dt, 0.0f, 1.0f);
         if (processor_) processor_->set_slot_wet_mix(focused_, slots_[focused_].wet_mix);
+    }
+
+    // L key — Load DSP into focused slot
+    {
+        const uint8_t* keys = SDL_GetKeyboardState(nullptr);
+        static bool l_prev = false;
+        if (keys[SDL_SCANCODE_L] && !l_prev) {
+            if (on_load_) on_load_(focused_);
+        }
+        l_prev = keys[SDL_SCANCODE_L] != 0;
+
+        // X key — Unload (clear) focused slot
+        static bool x_prev = false;
+        if (keys[SDL_SCANCODE_X] && !x_prev) {
+            if (on_unload_) on_unload_(focused_);
+            slots_[focused_].name = "SLOT " + std::to_string(focused_ + 1);
+            slots_[focused_].loaded = false;
+        }
+        x_prev = keys[SDL_SCANCODE_X] != 0;
+    }
+
+    // Enter on empty slot — open file browser
+    if (input.pressed(Action::NAV_SELECT) && !slots_[focused_].loaded) {
+        if (on_load_) on_load_(focused_);
+        return;
     }
 
     // Reorder mode toggle

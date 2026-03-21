@@ -66,6 +66,8 @@ set(SOURCES
     src/ui/param_screen.cpp
     src/ui/viz_screen.cpp
     src/ui/settings_screen.cpp
+    src/ui/file_browser.cpp
+    src/ui/editor_screen.cpp
 )
 
 # ── Target ────────────────────────────────────────────────────────────

@@ -20,6 +20,8 @@
 #include "ui/viz_screen.hpp"
 #include "ui/settings_screen.hpp"
 #include "ui/help_screen.hpp"
+#include "ui/file_browser.hpp"
+#include "ui/editor_screen.hpp"
 
 #include <vector>
 #include <memory>
@@ -52,6 +54,14 @@ public:
     audio::FXChainProcessor& fx_processor() { return fx_processor_; }
     renderer::Renderer& renderer_ref() { return renderer_; }
 
+    // Text input buffer (consumed per-frame by active screen)
+    const std::string& text_input() const { return text_input_buffer_; }
+
+    // File browser modal
+    void open_file_browser(int target_slot = -1);
+    bool file_browser_open() const { return file_browser_open_; }
+    int  file_browser_target_slot() const { return file_browser_target_slot_; }
+
 private:
     bool running_ = false;
 
@@ -72,6 +82,10 @@ private:
     ui::ParamScreen*    param_screen_     = nullptr;
     ui::VizScreen*      viz_screen_       = nullptr;
     ui::SettingsScreen* settings_screen_  = nullptr;
+    ui::EditorScreen*   editor_screen_    = nullptr;
+
+    // File browser modal (overlay, not in screen stack)
+    ui::FileBrowserScreen file_browser_modal_;
 
     // Main menu overlay
     ui::MainMenu main_menu_;
@@ -86,6 +100,13 @@ private:
     float fps_timer_   = 0;
     int   fps_counter_ = 0;
     int   fps_display_ = 0;
+
+    // Text input (SDL_TEXTINPUT buffer, consumed per-frame by screens)
+    std::string text_input_buffer_;
+
+    // File browser modal state
+    bool file_browser_open_ = false;
+    int  file_browser_target_slot_ = -1;
 
     void process_events();
     void update(float dt);

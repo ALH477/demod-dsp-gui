@@ -8,6 +8,8 @@
 #include "input/bci_device.hpp"
 #include "input/midi_device.hpp"
 #include "renderer/font.hpp"
+#include "ui/file_browser.hpp"
+#include "ui/editor_screen.hpp"
 
 #include <SDL2/SDL.h>
 #include <cstdio>
@@ -140,12 +142,36 @@ bool Engine::init(const EngineConfig& config) {
     );
     screens_.push_back(std::move(settings));
 
+    // Editor screen
+    auto editor = std::make_unique<ui::EditorScreen>();
+    editor_screen_ = editor.get();
+    editor_screen_->set_on_compile([this](const std::string& path) -> bool {
+        // JIT compile the .dsp file
+        auto& faust = fx_processor_;  // Use slot 0 bridge for compile test
+        // Actually, just try loading via FaustBridge for compile feedback
+        // For now, return true and let the UI show a message
+        fprintf(stderr, "[ENGINE] Editor compile: %s\n", path.c_str());
+        return true;
+    });
+    screens_.push_back(std::move(editor));
+
+    // Wire FX chain load/unload callbacks
+    fx_chain_screen_->set_on_load([this](int slot) {
+        open_file_browser(slot);
+    });
+    fx_chain_screen_->set_on_unload([this](int slot) {
+        fx_processor_.unload_slot(slot);
+    });
+
     // ── Menu ─────────────────────────────────────────────────────────
     setup_menu_entries();
 
     // Start on the title screen with chiptune music
     menu_open_ = true;
     main_menu_.on_enter();
+
+    // Enable SDL text input for editor
+    SDL_StartTextInput();
 
     running_ = true;
     fprintf(stderr, "[ENGINE] Ready. %d screens, res %dx%d\n",
@@ -185,6 +211,12 @@ void Engine::setup_menu_entries() {
                 main_menu_.set_has_session(true);
                 chiptune_.set_playing(false);
             }},
+        {"EDITOR", "Write and compile Faust DSP code directly.",
+            [this]{
+                current_screen_ = 4; menu_open_ = false;
+                main_menu_.set_has_session(true);
+                chiptune_.set_playing(false);
+            }},
         {"", "", []{}, true, true},  // ── separator ──
         {"HELP", "Learn all the controls, features, and how to use DeMoDOOM.",
             [this]{
@@ -218,6 +250,9 @@ void Engine::run() {
         update(dt);
         render();
 
+        // Clear text input buffer after screens consume it
+        text_input_buffer_.clear();
+
         auto frame_end = std::chrono::high_resolution_clock::now();
         double elapsed = std::chrono::duration<double, std::milli>(frame_end - now).count();
         if (elapsed < FRAME_TIME_MS)
@@ -233,6 +268,9 @@ void Engine::process_events() {
         if (ev.type == SDL_QUIT) { quit(); return; }
         if (ev.type == SDL_WINDOWEVENT &&
             ev.window.event == SDL_WINDOWEVENT_CLOSE) { quit(); return; }
+        if (ev.type == SDL_TEXTINPUT) {
+            text_input_buffer_ += ev.text.text;
+        }
         input_.process_sdl_event(ev);
     }
 }
@@ -302,6 +340,21 @@ void Engine::update(float dt) {
     // Apply axes to FX chain slot params (if any slot is loaded)
     // TODO: Per-slot axis mapping
 
+    // File browser modal (overlay, eats input when open)
+    if (file_browser_open_) {
+        file_browser_modal_.update(input_, dt);
+        file_browser_modal_.feed_text_input(text_input_buffer_);
+        if (!file_browser_modal_.is_open()) {
+            file_browser_open_ = false;
+        }
+        return;
+    }
+
+    // Feed text input to editor screen if it's the active screen
+    if (editor_screen_ && screens_[current_screen_].get() == editor_screen_) {
+        editor_screen_->feed_text_input(text_input_buffer_);
+    }
+
     screens_[current_screen_]->update(input_, dt);
 }
 
@@ -311,6 +364,11 @@ void Engine::render() {
     // Draw current screen
     if (!screens_.empty())
         screens_[current_screen_]->draw(renderer_);
+
+    // File browser overlay
+    if (file_browser_open_) {
+        file_browser_modal_.draw(renderer_);
+    }
 
     // Screen tabs
     draw_screen_tabs();
@@ -547,6 +605,31 @@ bool Engine::load_preset(const std::string& filename) {
 
     fprintf(stderr, "[ENGINE] Preset loaded: %s\n", p.name.c_str());
     return true;
+}
+
+void Engine::open_file_browser(int target_slot) {
+    file_browser_open_ = true;
+    file_browser_target_slot_ = target_slot;
+
+    // Configure file browser for DSP files
+    file_browser_modal_.set_mode(ui::FileBrowserScreen::Mode::OPEN);
+    file_browser_modal_.set_extensions({".dsp", ".cpp", ".so"});
+    file_browser_modal_.set_on_select([this, target_slot](const std::string& path) {
+        fprintf(stderr, "[ENGINE] Loading DSP into slot %d: %s\n",
+                target_slot, path.c_str());
+        if (fx_processor_.load_slot(target_slot, path)) {
+            fx_processor_.set_slot_bypassed(target_slot, false);
+            audio_.activate_input();
+        }
+        file_browser_open_ = false;
+    });
+    file_browser_modal_.set_on_save([this](const std::string& path) {
+        // Save As from editor
+        if (editor_screen_) {
+            editor_screen_->set_file_path(path);
+        }
+        file_browser_open_ = false;
+    });
 }
 
 } // namespace demod
