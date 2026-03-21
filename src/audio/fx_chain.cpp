@@ -12,7 +12,7 @@ namespace demod::audio {
 FXChainProcessor::FXChainProcessor() {
     for (int i = 0; i < MAX_FX_SLOTS; ++i) {
         loaded_[i].store(false, std::memory_order_relaxed);
-        bypassed_[i].store(false, std::memory_order_relaxed);
+        bypassed_[i].store(true, std::memory_order_relaxed);  // Bypassed by default
         wet_mix_[i].store(1.0f, std::memory_order_relaxed);
         order_[i].store(i, std::memory_order_relaxed);
     }
