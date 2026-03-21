@@ -172,10 +172,18 @@ TEST_CASE("Load nonexistent preset returns false", "[preset]") {
 TEST_CASE("List presets returns saved files", "[preset]") {
     PresetManager mgr;
     mgr.set_preset_dir(test_dir());
+
+    // Save a preset first to ensure there's something to list
+    Preset p;
+    p.name = "list_test";
+    mgr.save(p, PresetFormat::KEY_VALUE_TEXT);
+
     auto list = mgr.list_presets();
     CHECK(list.size() >= 1);
     bool found = false;
-    for (const auto& s : list) if (s == "test_preset") found = true;
+    for (const auto& s : list)
+        if (s == "list_test" || s == "test_preset" || s == "empty_test")
+            found = true;
     CHECK(found);
 }
 

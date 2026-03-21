@@ -5,6 +5,7 @@
 #include "ui/settings_screen.hpp"
 #include <algorithm>
 #include <cstdio>
+#include <SDL2/SDL.h>
 
 namespace demod::ui {
 
@@ -147,7 +148,26 @@ std::vector<SettingsScreen::SettingItem> SettingsScreen::current_items() const {
             items.push_back({input_mgr_.device_name(i), status, false});
         }
         items.push_back({"", "", false});
-        items.push_back({"Rebind Keys", "Coming soon", false});
+
+        // Key bindings list
+        struct ActionEntry { const char* name; Action action; };
+        const ActionEntry actions[] = {
+            {"Navigate", Action::NAV_UP},
+            {"Select", Action::NAV_SELECT},
+            {"Back/Menu", Action::NAV_BACK},
+            {"Param +", Action::PARAM_INC},
+            {"Param -", Action::PARAM_DEC},
+            {"Reset Param", Action::PARAM_RESET},
+            {"Bypass", Action::BYPASS_TOGGLE},
+            {"Next Screen", Action::SCREEN_NEXT},
+            {"Play", Action::TRANSPORT_PLAY},
+            {"Quit", Action::QUIT},
+        };
+        for (const auto& ae : actions) {
+            int ai = &ae - actions;
+            bool is_rebinding = rebind_mode_ && rebind_target_ == ai;
+            items.push_back({ae.name, is_rebinding ? "[Listening...]" : "[Enter to rebind]", true});
+        }
     } break;
 
     // ── ABOUT ────────────────────────────────────────────────────────
@@ -235,6 +255,30 @@ void SettingsScreen::apply_change(int idx, int dir) {
         }
     } break;
 
+    case Section::INPUT: {
+        // Action entries start at index 5 (after 4 device/separator items)
+        struct ActionEntry { const char* name; Action action; };
+        const ActionEntry actions[] = {
+            {"Navigate", Action::NAV_UP},
+            {"Select", Action::NAV_SELECT},
+            {"Back/Menu", Action::NAV_BACK},
+            {"Param +", Action::PARAM_INC},
+            {"Param -", Action::PARAM_DEC},
+            {"Reset Param", Action::PARAM_RESET},
+            {"Bypass", Action::BYPASS_TOGGLE},
+            {"Next Screen", Action::SCREEN_NEXT},
+            {"Play", Action::TRANSPORT_PLAY},
+            {"Quit", Action::QUIT},
+        };
+        int action_idx = idx - 5;
+        if (action_idx >= 0 && action_idx < 10) {
+            rebind_mode_ = true;
+            rebind_target_ = action_idx;
+            rebind_action_ = actions[action_idx].action;
+            fprintf(stderr, "[SETTINGS] Rebind mode: listening for key...\n");
+        }
+    } break;
+
     default: break;
     }
 }
@@ -268,6 +312,31 @@ bool SettingsScreen::skip_to_editable(int dir, const std::vector<SettingItem>& i
 void SettingsScreen::update(const input::InputManager& input, float dt) {
     (void)dt;
 
+    // Key rebind capture
+    if (rebind_mode_) {
+        // Check for a new keypress via SDL
+        int num_keys = 0;
+        const uint8_t* keys = SDL_GetKeyboardState(&num_keys);
+        for (int i = 0; i < num_keys && i < SDL_NUM_SCANCODES; ++i) {
+            if (keys[i] && i != SDL_SCANCODE_ESCAPE) {
+                // Create a new keyboard binding for this action
+                input_mgr_.bind("keyboard", { i, rebind_action_, 0, 1, false });
+                fprintf(stderr, "[SETTINGS] Bound scancode %d (%s) to action %d\n",
+                        i, SDL_GetScancodeName(SDL_Scancode(i)), int(rebind_action_));
+                rebind_mode_ = false;
+                rebind_target_ = -1;
+                return;
+            }
+        }
+        // Escape cancels
+        if (keys[SDL_SCANCODE_ESCAPE]) {
+            rebind_mode_ = false;
+            rebind_target_ = -1;
+            return;
+        }
+        return; // Don't process other input while rebinding
+    }
+
     // Section switching
     if (input.pressed(Action::NAV_TAB_NEXT)) {
         section_ = Section((int(section_) + 1) % section_count());
@@ -298,8 +367,12 @@ void SettingsScreen::update(const input::InputManager& input, float dt) {
             apply_change(focused_, 1);
         if (input.pressed(Action::NAV_LEFT) || input.pressed(Action::PARAM_DEC))
             apply_change(focused_, -1);
-        if (input.pressed(Action::NAV_SELECT) && items[focused_].is_toggle)
-            apply_change(focused_, 0);
+        if (input.pressed(Action::NAV_SELECT)) {
+            if (items[focused_].is_toggle)
+                apply_change(focused_, 0);
+            else
+                apply_change(focused_, 1); // Enter triggers rebind for INPUT items
+        }
     }
 
     // Scroll

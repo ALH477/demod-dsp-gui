@@ -67,6 +67,11 @@ private:
     std::vector<std::string> preset_list_;
     int preset_selected_ = 0;
 
+    // Key rebind state
+    bool rebind_mode_ = false;
+    int  rebind_target_ = -1;  // Which action entry to rebind
+    Action rebind_action_ = Action::NONE;
+
     std::vector<SettingItem> current_items() const;
     void apply_change(int item_index, int direction);
     bool skip_to_editable(int dir, const std::vector<SettingItem>& items);
