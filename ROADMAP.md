@@ -35,7 +35,7 @@
 - [ ] Multi-engine — load and switch between multiple .dsp files
 - [ ] Per-slot CPU meter — show processing time per FX slot in debug overlay
 - [ ] Full documentation — man page, tutorial, example .dsp files
-- [ ] Automated tests — unit tests for FX chain, presets, chiptune RNG
+- [x] Automated tests — unit tests for FX chain, presets, chiptune, renderer, input, Faust bridge (64 tests)
 
 ## Backlog
 - [ ] DOOM-themed preset files (.wad extension)
