@@ -6,13 +6,12 @@
 
 #include "ui/screen.hpp"
 #include "audio/audio_engine.hpp"
-#include "audio/faust_bridge.hpp"
 
 namespace demod::ui {
 
 class VizScreen : public Screen {
 public:
-    VizScreen(audio::AudioEngine& audio, audio::FaustBridge& faust);
+    VizScreen(audio::AudioEngine& audio);
 
     std::string name() const override { return "VIZ"; }
     std::string help_text() const override {
@@ -24,7 +23,6 @@ public:
 
 private:
     audio::AudioEngine& audio_;
-    audio::FaustBridge& faust_;
 
     VizMode mode_ = VizMode::SCOPE;
 

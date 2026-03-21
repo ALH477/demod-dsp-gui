@@ -38,6 +38,7 @@ set(SOURCES
     src/audio/audio_engine.cpp
     src/audio/faust_bridge.cpp
     src/audio/chiptune.cpp
+    src/audio/fx_chain.cpp
 
     # UI Screens
     src/ui/main_menu.cpp

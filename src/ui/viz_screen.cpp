@@ -12,8 +12,8 @@ namespace demod::ui {
 
 static constexpr float PI = 3.14159265f;
 
-VizScreen::VizScreen(audio::AudioEngine& audio, audio::FaustBridge& faust)
-    : audio_(audio), faust_(faust) {
+VizScreen::VizScreen(audio::AudioEngine& audio)
+    : audio_(audio) {
     std::memset(display_L_, 0, sizeof(display_L_));
     std::memset(display_R_, 0, sizeof(display_R_));
     std::memset(spectrum_, 0, sizeof(spectrum_));

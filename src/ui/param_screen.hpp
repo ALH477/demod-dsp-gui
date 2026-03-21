@@ -1,14 +1,14 @@
 #pragma once
 #include "ui/screen.hpp"
 #include "ui/fx_chain_screen.hpp"
-#include "audio/faust_bridge.hpp"
+#include "audio/fx_chain.hpp"
 #include <vector>
 
 namespace demod::ui {
 
 class ParamScreen : public Screen {
 public:
-    ParamScreen(audio::FaustBridge& faust, FXChainScreen& chain);
+    ParamScreen(audio::FXChainProcessor& fx, FXChainScreen& chain);
 
     std::string name() const override { return "PARAMS"; }
     std::string help_text() const override {
@@ -19,8 +19,8 @@ public:
     void draw(renderer::Renderer& r) override;
 
 private:
-    audio::FaustBridge& faust_;
-    FXChainScreen&      chain_;
+    audio::FXChainProcessor& fx_;
+    FXChainScreen&           chain_;
 
     int   focused_param_  = 0;
     int   scroll_         = 0;

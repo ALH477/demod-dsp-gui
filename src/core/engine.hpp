@@ -9,6 +9,7 @@
 #include "renderer/renderer.hpp"
 #include "audio/audio_engine.hpp"
 #include "audio/faust_bridge.hpp"
+#include "audio/fx_chain.hpp"
 #include "audio/chiptune.hpp"
 
 #include "ui/screen.hpp"
@@ -50,7 +51,7 @@ private:
     input::InputManager     input_;
     renderer::Renderer      renderer_;
     audio::AudioEngine      audio_;
-    audio::FaustBridge      faust_;
+    audio::FXChainProcessor fx_processor_;
     audio::ChiptuneSynth    chiptune_;
 
     // Screens (index-based switching)

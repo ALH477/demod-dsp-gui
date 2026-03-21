@@ -1,7 +1,9 @@
 #pragma once
 #include "ui/screen.hpp"
-#include "audio/faust_bridge.hpp"
+#include "core/config.hpp"
 #include <vector>
+
+namespace demod::audio { class FXChainProcessor; }
 
 namespace demod::ui {
 
@@ -19,6 +21,8 @@ public:
 
     std::vector<FXSlot>& slots() { return slots_; }
 
+    void set_processor(audio::FXChainProcessor* proc) { processor_ = proc; }
+
 private:
     std::vector<FXSlot> slots_;
     int  focused_     = 0;
@@ -27,8 +31,11 @@ private:
     int  drag_from_   = -1;
     float blink_t_    = 0;
 
+    audio::FXChainProcessor* processor_ = nullptr;
+
     void init_demo_slots();
     int  visible_slots(int fb_h) const;
+    void sync_from_processor();
 };
 
 } // namespace demod::ui

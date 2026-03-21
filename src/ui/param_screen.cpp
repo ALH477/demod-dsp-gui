@@ -10,8 +10,8 @@
 
 namespace demod::ui {
 
-ParamScreen::ParamScreen(audio::FaustBridge& faust, FXChainScreen& chain)
-    : faust_(faust), chain_(chain) { init_demo_params(); }
+ParamScreen::ParamScreen(audio::FXChainProcessor& fx, FXChainScreen& chain)
+    : fx_(fx), chain_(chain) { init_demo_params(); }
 
 void ParamScreen::init_demo_params() {
     demo_params_ = {
@@ -35,36 +35,51 @@ void ParamScreen::init_demo_params() {
 }
 
 int ParamScreen::param_count() const {
-    return faust_.loaded() ? faust_.num_params() : (int)demo_params_.size();
+    if (fx_.slot_loaded(active_fx_))
+        return fx_.slot_num_params(active_fx_);
+    return (int)demo_params_.size();
 }
 std::string ParamScreen::param_label(int i) const {
-    return faust_.loaded() ? faust_.params()[i].label : demo_params_[i].label;
+    if (fx_.slot_loaded(active_fx_)) {
+        const auto& params = fx_.slot_params(active_fx_);
+        return (i < (int)params.size()) ? params[i].label : "???";
+    }
+    return demo_params_[i].label;
 }
 float ParamScreen::param_normalized(int i) const {
-    if (faust_.loaded()) {
-        const auto& p = faust_.params()[i];
-        return (p.max<=p.min) ? 0 : (faust_.get_param(i)-p.min)/(p.max-p.min);
+    if (fx_.slot_loaded(active_fx_)) {
+        const auto& params = fx_.slot_params(active_fx_);
+        if (i >= (int)params.size()) return 0;
+        const auto& p = params[i];
+        return (p.max<=p.min) ? 0 : (fx_.get_slot_param(active_fx_, i)-p.min)/(p.max-p.min);
     }
     return demo_params_[i].value;
 }
 float ParamScreen::param_default_normalized(int i) const {
-    if (faust_.loaded()) {
-        const auto& p = faust_.params()[i];
+    if (fx_.slot_loaded(active_fx_)) {
+        const auto& params = fx_.slot_params(active_fx_);
+        if (i >= (int)params.size()) return 0;
+        const auto& p = params[i];
         return (p.max<=p.min) ? 0 : (p.init-p.min)/(p.max-p.min);
     }
     return demo_params_[i].init;
 }
 void ParamScreen::adjust_param(int i, float delta) {
-    if (faust_.loaded()) {
-        const auto& p = faust_.params()[i];
-        faust_.set_param(i, std::clamp(faust_.get_param(i)+delta*p.step, p.min, p.max));
+    if (fx_.slot_loaded(active_fx_)) {
+        const auto& params = fx_.slot_params(active_fx_);
+        if (i >= (int)params.size()) return;
+        const auto& p = params[i];
+        float val = fx_.get_slot_param(active_fx_, i) + delta * p.step;
+        fx_.set_slot_param(active_fx_, i, std::clamp(val, p.min, p.max));
     } else {
         demo_params_[i].value = std::clamp(demo_params_[i].value+delta*0.01f, 0.f, 1.f);
     }
 }
 void ParamScreen::reset_param(int i) {
-    if (faust_.loaded()) {
-        faust_.set_param(i, faust_.params()[i].init);
+    if (fx_.slot_loaded(active_fx_)) {
+        const auto& params = fx_.slot_params(active_fx_);
+        if (i >= (int)params.size()) return;
+        fx_.set_slot_param(active_fx_, i, params[i].init);
     } else {
         demo_params_[i].value = demo_params_[i].init;
     }
@@ -110,10 +125,11 @@ void ParamScreen::update(const input::InputManager& input, float dt) {
 
     if (input.pressed(Action::PARAM_RESET)) reset_param(focused_param_);
     if (input.pressed(Action::PARAM_RANDOMIZE)) {
-        for (int i = 0; i < count; ++i) {
-            if (!faust_.loaded()) demo_params_[i].value = float(rand()) / RAND_MAX;
-            else faust_.randomize_params();
-        }
+        if (fx_.slot_loaded(active_fx_))
+            fx_.randomize_slot_params(active_fx_);
+        else
+            for (int i = 0; i < count; ++i)
+                demo_params_[i].value = float(rand()) / RAND_MAX;
     }
     if (input.pressed(Action::BYPASS_TOGGLE)) bypass_ = !bypass_;
 

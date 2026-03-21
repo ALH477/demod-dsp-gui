@@ -57,23 +57,12 @@ bool Engine::init(const EngineConfig& config) {
     }
     input_.load_default_bindings();
 
-    // ── Faust DSP ────────────────────────────────────────────────────
+    // ── Faust DSP (load into FX slot 0) ──────────────────────────────
+    fx_processor_.set_sample_rate(config.sample_rate);
     if (!config.dsp_path.empty()) {
-        bool ok = false;
-        const auto& p = config.dsp_path;
-
-        // Extract extension properly
-        auto dot = p.rfind('.');
-        std::string ext = (dot != std::string::npos) ? p.substr(dot) : "";
-
-        if (ext == ".dsp")
-            ok = faust_.load_dsp_source(p, config.sample_rate);
-        else if (ext == ".cpp" || ext == ".cxx")
-            ok = faust_.load_dsp_cpp(p, config.sample_rate);
-        else if (ext == ".so" || ext == ".dylib")
-            ok = faust_.load_dsp_library(p, config.sample_rate);
-
-        if (!ok) fprintf(stderr, "[ENGINE] DSP load failed: %s — demo mode\n", p.c_str());
+        if (!fx_processor_.load_slot(0, config.dsp_path))
+            fprintf(stderr, "[ENGINE] DSP load failed: %s — demo mode\n",
+                    config.dsp_path.c_str());
     }
 
     // ── Chiptune ──────────────────────────────────────────────────────
@@ -83,23 +72,19 @@ bool Engine::init(const EngineConfig& config) {
     // ── Audio ────────────────────────────────────────────────────────
     audio_.set_sample_rate(config.sample_rate);
     audio_.set_block_size(config.block_size);
-    audio_.set_channels(std::max(2, faust_.num_inputs()), std::max(2, faust_.num_outputs()));
+    audio_.set_channels(std::max(2, 2), std::max(2, 2));
 
     audio_.set_callback([this](const float* const* in, float* const* out,
                                 int n_ch, int n_frames) {
         float* buf = out[0];
 
-        if (faust_.loaded()) {
-            if (in) {
-                // Duplex: pass input through DSP to output
-                faust_.process_interleaved(in, buf, n_frames);
-            } else {
-                // Output-only (no input connected)
-                faust_.process_interleaved(buf, n_frames);
-            }
+        // Process FX chain (serial chain of per-slot DSPs)
+        if (in) {
+            fx_processor_.process_serial(in, buf, n_ch, n_frames);
         } else {
-            // Silence base — chiptune will fill it
+            // Silence base if no input and no DSP loaded
             std::memset(buf, 0, size_t(n_frames) * size_t(n_ch) * sizeof(float));
+            fx_processor_.process_serial(buf, n_ch, n_frames);
         }
 
         // Mix chiptune on top (additive, handles its own playing_ check)
@@ -114,13 +99,14 @@ bool Engine::init(const EngineConfig& config) {
     // ── Screens ──────────────────────────────────────────────────────
     auto fx_chain = std::make_unique<ui::FXChainScreen>();
     fx_chain_screen_ = fx_chain.get();
+    fx_chain_screen_->set_processor(&fx_processor_);
     screens_.push_back(std::move(fx_chain));
 
-    auto params = std::make_unique<ui::ParamScreen>(faust_, *fx_chain_screen_);
+    auto params = std::make_unique<ui::ParamScreen>(fx_processor_, *fx_chain_screen_);
     param_screen_ = params.get();
     screens_.push_back(std::move(params));
 
-    auto viz = std::make_unique<ui::VizScreen>(audio_, faust_);
+    auto viz = std::make_unique<ui::VizScreen>(audio_);
     viz_screen_ = viz.get();
     screens_.push_back(std::move(viz));
 
@@ -287,13 +273,8 @@ void Engine::update(float dt) {
         screens_[current_screen_]->on_enter();
     }
 
-    // Apply axes to Faust
-    if (faust_.loaded()) {
-        faust_.apply_axis(Action::AXIS_X, input_.axis(Action::AXIS_X));
-        faust_.apply_axis(Action::AXIS_Y, input_.axis(Action::AXIS_Y));
-        faust_.apply_axis(Action::AXIS_Z, input_.axis(Action::AXIS_Z));
-        faust_.apply_axis(Action::AXIS_W, input_.axis(Action::AXIS_W));
-    }
+    // Apply axes to FX chain slot params (if any slot is loaded)
+    // TODO: Per-slot axis mapping
 
     screens_[current_screen_]->update(input_, dt);
 }
@@ -420,14 +401,11 @@ void Engine::draw_debug_overlay() {
     Font::draw_string(renderer_, 4, y, buf, LIGHT_GRAY); y += lh;
 
     y += 4;
-    Font::draw_string(renderer_, 4, y, "DSP:", VIOLET_LIGHT); y += lh;
-    std::string dsp_st = faust_.loaded() ? faust_.dsp_name() : "DEMO";
-    // Truncate long paths
-    if (dsp_st.size() > 24) dsp_st = "..." + dsp_st.substr(dsp_st.size()-21);
-    Font::draw_string(renderer_, 4, y, dsp_st, LIGHT_GRAY); y += lh;
-
-    snprintf(buf, sizeof(buf), "Params: %d  I/O: %d/%d",
-             faust_.num_params(), faust_.num_inputs(), faust_.num_outputs());
+    Font::draw_string(renderer_, 4, y, "FX CHAIN:", VIOLET_LIGHT); y += lh;
+    int loaded_slots = 0;
+    for (int i = 0; i < MAX_FX_SLOTS; ++i)
+        if (fx_processor_.slot_loaded(i)) loaded_slots++;
+    snprintf(buf, sizeof(buf), "%d/%d slots loaded", loaded_slots, MAX_FX_SLOTS);
     Font::draw_string(renderer_, 4, y, buf, LIGHT_GRAY); y += lh;
 
     y += 4;

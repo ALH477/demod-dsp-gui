@@ -3,6 +3,7 @@
 // ╚══════════════════════════════════════════════════════════════════════╝
 
 #include "ui/fx_chain_screen.hpp"
+#include "audio/fx_chain.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -13,19 +14,33 @@ FXChainScreen::FXChainScreen() { init_demo_slots(); }
 
 void FXChainScreen::init_demo_slots() {
     const char* names[] = {
-        "NOISE GATE",  "COMP/LIMITER", "EQ: PARAMETRIC",
-        "OVERDRIVE",   "DISTORTION",   "CHORUS",
-        "PHASER",      "DELAY",        "REVERB",
-        "CABINET SIM", "STEREO WIDTH", "MASTER LIMITER"
+        "SLOT 1",  "SLOT 2",  "SLOT 3",
+        "SLOT 4",  "SLOT 5",  "SLOT 6",
+        "SLOT 7",  "SLOT 8",  "SLOT 9",
+        "SLOT 10", "SLOT 11", "SLOT 12"
     };
     slots_.resize(MAX_FX_SLOTS);
     for (int i = 0; i < MAX_FX_SLOTS; ++i) {
         slots_[i].id       = i;
         slots_[i].name     = names[i];
         slots_[i].color    = FX_COLORS[i];
-        slots_[i].loaded   = (i < 9);  // First 9 "loaded" in demo
-        slots_[i].bypassed = (i == 4 || i == 6);
-        slots_[i].wet_mix  = (i < 3) ? 1.0f : 0.5f + 0.05f * i;
+        slots_[i].loaded   = false;
+        slots_[i].bypassed = false;
+        slots_[i].wet_mix  = 1.0f;
+    }
+}
+
+void FXChainScreen::sync_from_processor() {
+    if (!processor_) return;
+    for (int i = 0; i < MAX_FX_SLOTS && i < (int)slots_.size(); ++i) {
+        slots_[i].loaded   = processor_->slot_loaded(i);
+        slots_[i].bypassed = processor_->slot_bypassed(i);
+        slots_[i].wet_mix  = processor_->slot_wet_mix(i);
+        if (slots_[i].loaded) {
+            std::string name = processor_->slot_dsp_name(i);
+            if (!name.empty())
+                slots_[i].name = name;
+        }
     }
 }
 
@@ -38,6 +53,9 @@ void FXChainScreen::update(const input::InputManager& input, float dt) {
     int count = (int)slots_.size();
     if (count == 0) return;
 
+    // Sync from processor each frame
+    sync_from_processor();
+
     // Navigation
     if (input.pressed(Action::NAV_DOWN))
         focused_ = std::min(focused_ + 1, count - 1);
@@ -47,14 +65,17 @@ void FXChainScreen::update(const input::InputManager& input, float dt) {
     // Wet/dry with L/R
     if (input.held(Action::NAV_RIGHT) || input.held(Action::PARAM_INC)) {
         slots_[focused_].wet_mix = std::min(1.0f, slots_[focused_].wet_mix + dt);
+        if (processor_) processor_->set_slot_wet_mix(focused_, slots_[focused_].wet_mix);
     }
     if (input.held(Action::NAV_LEFT) || input.held(Action::PARAM_DEC)) {
         slots_[focused_].wet_mix = std::max(0.0f, slots_[focused_].wet_mix - dt);
+        if (processor_) processor_->set_slot_wet_mix(focused_, slots_[focused_].wet_mix);
     }
 
     // Bypass
     if (input.pressed(Action::BYPASS_TOGGLE)) {
         slots_[focused_].bypassed = !slots_[focused_].bypassed;
+        if (processor_) processor_->set_slot_bypassed(focused_, slots_[focused_].bypassed);
     }
 
     // Reorder mode toggle
@@ -65,12 +86,13 @@ void FXChainScreen::update(const input::InputManager& input, float dt) {
         } else if (drag_from_ >= 0 && drag_from_ != focused_) {
             // Swap slots
             std::swap(slots_[drag_from_], slots_[focused_]);
+            if (processor_) processor_->swap_slots(drag_from_, focused_);
             drag_from_ = -1;
         }
     }
 
     // Scroll
-    int vis = 8; // Will be set properly in draw
+    int vis = 8;
     if (focused_ < scroll_) scroll_ = focused_;
     if (focused_ >= scroll_ + vis) scroll_ = focused_ - vis + 1;
 }
