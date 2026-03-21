@@ -122,6 +122,9 @@ void ParamScreen::update(const input::InputManager& input, float dt) {
     // Analog axis
     float ax = input.axis(Action::AXIS_X);
     if (std::fabs(ax) > 0.1f) adjust_param(focused_param_, ax * dt * 2);
+    // Right stick for fine control
+    float az = input.axis(Action::AXIS_Z);
+    if (std::fabs(az) > 0.1f) adjust_param(focused_param_, az * dt * 0.5f);
 
     if (input.pressed(Action::PARAM_RESET)) reset_param(focused_param_);
     if (input.pressed(Action::PARAM_RANDOMIZE)) {

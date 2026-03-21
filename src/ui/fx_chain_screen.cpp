@@ -78,6 +78,13 @@ void FXChainScreen::update(const input::InputManager& input, float dt) {
         if (processor_) processor_->set_slot_bypassed(focused_, slots_[focused_].bypassed);
     }
 
+    // Analog axis → wet mix (gamepad right stick Y)
+    float ay = input.axis(Action::AXIS_Y);
+    if (std::fabs(ay) > 0.1f) {
+        slots_[focused_].wet_mix = std::clamp(slots_[focused_].wet_mix + ay * dt, 0.0f, 1.0f);
+        if (processor_) processor_->set_slot_wet_mix(focused_, slots_[focused_].wet_mix);
+    }
+
     // Reorder mode toggle
     if (input.pressed(Action::PARAM_RANDOMIZE)) { // R key
         reorder_mode_ = !reorder_mode_;
