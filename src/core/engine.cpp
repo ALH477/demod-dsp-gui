@@ -6,6 +6,7 @@
 #include "input/keyboard_device.hpp"
 #include "input/gamepad_device.hpp"
 #include "input/bci_device.hpp"
+#include "input/midi_device.hpp"
 #include "renderer/font.hpp"
 
 #include <SDL2/SDL.h>
@@ -55,6 +56,20 @@ bool Engine::init(const EngineConfig& config) {
     if (config.enable_bci) {
         input_.add_device(std::make_unique<input::BCIDevice>());
     }
+
+    // ── MIDI ─────────────────────────────────────────────────────────
+    {
+        int n_midi = input::MidiDevice::port_count();
+        if (n_midi > 0) {
+            fprintf(stderr, "[ENGINE] %d MIDI input port(s) detected\n", n_midi);
+            // Open first available MIDI port
+            auto midi = std::make_unique<input::MidiDevice>(0);
+            if (midi->open()) {
+                input_.add_device(std::move(midi));
+            }
+        }
+    }
+
     input_.load_default_bindings();
 
     // ── Faust DSP (load into FX slot 0) ──────────────────────────────

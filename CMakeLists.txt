@@ -15,6 +15,7 @@ pkg_check_modules(SDL2      REQUIRED IMPORTED_TARGET sdl2)
 pkg_check_modules(PIPEWIRE  REQUIRED IMPORTED_TARGET libpipewire-0.3)
 pkg_check_modules(SPA       REQUIRED IMPORTED_TARGET libspa-0.2)
 pkg_check_modules(FAUST     IMPORTED_TARGET faust)
+pkg_check_modules(RTMIDI    IMPORTED_TARGET rtmidi)
 
 # ── Sources ───────────────────────────────────────────────────────────
 set(SOURCES
@@ -28,6 +29,7 @@ set(SOURCES
     src/input/gamepad_device.cpp
     src/input/keyboard_device.cpp
     src/input/bci_device.cpp
+    src/input/midi_device.cpp
 
     # Renderer
     src/renderer/renderer.cpp
@@ -64,6 +66,11 @@ target_link_libraries(demodoom PRIVATE
 if(FAUST_FOUND)
     target_compile_definitions(demodoom PRIVATE HAVE_LIBFAUST=1)
     target_link_libraries(demodoom PRIVATE PkgConfig::FAUST)
+endif()
+
+if(RTMIDI_FOUND)
+    target_compile_definitions(demodoom PRIVATE HAVE_RTMIDI=1)
+    target_link_libraries(demodoom PRIVATE PkgConfig::RTMIDI)
 endif()
 
 target_compile_options(demodoom PRIVATE

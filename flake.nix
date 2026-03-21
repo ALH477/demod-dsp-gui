@@ -16,7 +16,7 @@
           version = "0.2.0";
           src = ./.;
           nativeBuildInputs = with pkgs; [ cmake pkg-config ];
-          buildInputs = with pkgs; [ SDL2 pipewire ];
+          buildInputs = with pkgs; [ SDL2 pipewire rtmidi libjack2 ];
           cmakeFlags = [ "-DCMAKE_BUILD_TYPE=Release" ];
           meta = with pkgs.lib; {
             description = "DOOM-style framebuffer GUI for Faust DSP with multi-input and multi-resolution";
@@ -29,7 +29,7 @@
         devShells.default = pkgs.mkShell {
           inputsFrom = [ self.packages.${system}.default ];
           packages = with pkgs; [
-            gdb valgrind clang-tools bear faust
+            gdb valgrind clang-tools bear faust rtmidi libjack2
           ];
           shellHook = ''
             echo "┌──────────────────────────────────┐"
