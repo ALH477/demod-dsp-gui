@@ -12,6 +12,7 @@
 #include "audio/faust_bridge.hpp"
 #include "audio/fx_chain.hpp"
 #include "audio/chiptune.hpp"
+#include "record/recorder.hpp"
 
 #include "ui/screen.hpp"
 #include "ui/main_menu.hpp"
@@ -72,6 +73,7 @@ private:
     audio::FXChainProcessor fx_processor_;
     audio::ChiptuneSynth    chiptune_;
     PresetManager           preset_mgr_;
+    record::Recorder        recorder_;
 
     // Screens (index-based switching)
     std::vector<std::unique_ptr<ui::Screen>> screens_;

@@ -16,6 +16,11 @@ pkg_check_modules(PIPEWIRE  REQUIRED IMPORTED_TARGET libpipewire-0.3)
 pkg_check_modules(SPA       REQUIRED IMPORTED_TARGET libspa-0.2)
 pkg_check_modules(FAUST     IMPORTED_TARGET faust)
 pkg_check_modules(RTMIDI    IMPORTED_TARGET rtmidi)
+pkg_check_modules(AVFMT     IMPORTED_TARGET libavformat)
+pkg_check_modules(AVCODEC   IMPORTED_TARGET libavcodec)
+pkg_check_modules(SWSCALE   IMPORTED_TARGET libswscale)
+pkg_check_modules(SWRESAMP  IMPORTED_TARGET libswresample)
+pkg_check_modules(AVUTIL    IMPORTED_TARGET libavutil)
 
 # nlohmann-json: try cmake config, fallback to header check
 find_package(nlohmann_json QUIET)
@@ -58,6 +63,9 @@ set(SOURCES
     src/audio/faust_bridge.cpp
     src/audio/chiptune.cpp
     src/audio/fx_chain.cpp
+
+    # Recording
+    src/record/recorder.cpp
 
     # UI Screens
     src/ui/main_menu.cpp
@@ -104,6 +112,15 @@ endif()
 if(RTMIDI_FOUND)
     target_compile_definitions(demodoom PRIVATE HAVE_RTMIDI=1)
     target_link_libraries(demodoom PRIVATE PkgConfig::RTMIDI)
+endif()
+
+if(AVFMT_FOUND AND AVCODEC_FOUND AND SWSCALE_FOUND AND SWRESAMP_FOUND AND AVUTIL_FOUND)
+    target_compile_definitions(demodoom PRIVATE HAVE_FFMPEG=1)
+    target_link_libraries(demodoom PRIVATE
+        PkgConfig::AVFMT PkgConfig::AVCODEC
+        PkgConfig::SWSCALE PkgConfig::SWRESAMP
+        PkgConfig::AVUTIL)
+    message(STATUS "Found FFmpeg libraries")
 endif()
 
 if(nlohmann_json_FOUND)

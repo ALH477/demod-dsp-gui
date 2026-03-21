@@ -17,6 +17,7 @@
 #include <cmath>
 #include <chrono>
 #include <algorithm>
+#include <filesystem>
 
 namespace demod {
 
@@ -110,6 +111,9 @@ bool Engine::init(const EngineConfig& config) {
         if (n_ch >= 1) {
             chiptune_.process(buf, n_ch, n_frames);
         }
+
+        // Capture audio for recording (lock-free ring buffer)
+        recorder_.write_audio(buf, n_frames, n_ch);
     });
 
     if (!audio_.start("demodoom"))
@@ -250,6 +254,10 @@ void Engine::run() {
         update(dt);
         render();
 
+        // Capture video frame for recording (after post-FX applied)
+        recorder_.capture_frame(renderer_.framebuffer(),
+                                renderer_.fb_w(), renderer_.fb_h());
+
         // Clear text input buffer after screens consume it
         text_input_buffer_.clear();
 
@@ -287,6 +295,33 @@ void Engine::update(float dt) {
     static bool f3_prev = false;
     if (keys[SDL_SCANCODE_F3] && !f3_prev) show_debug_ = !show_debug_;
     f3_prev = keys[SDL_SCANCODE_F3];
+
+    // F6 recording toggle
+    static bool f6_prev = false;
+    if (keys[SDL_SCANCODE_F6] && !f6_prev) {
+        if (recorder_.recording()) {
+            recorder_.stop();
+        } else {
+            // Generate timestamped filename
+            auto now_t = std::chrono::system_clock::now();
+            auto time = std::chrono::system_clock::to_time_t(now_t);
+            char fname[256];
+            std::strftime(fname, sizeof(fname), "demodoom_%Y%m%d_%H%M%S.mp4",
+                          std::localtime(&time));
+
+            const char* home = std::getenv("HOME");
+            std::string dir = home ? std::string(home) + "/Videos/demodoom" : "/tmp";
+            // Create directory
+            std::filesystem::create_directories(dir);
+            std::string path = dir + "/" + fname;
+
+            record::RecorderConfig cfg;
+            cfg.output_path = path;
+            cfg.sample_rate = audio_.sample_rate();
+            recorder_.start(cfg, renderer_.fb_w(), renderer_.fb_h());
+        }
+    }
+    f6_prev = keys[SDL_SCANCODE_F6];
 
     // Escape / Menu toggle (only when help is not open)
     if (!help_open_) {
@@ -387,6 +422,23 @@ void Engine::render() {
     // Debug
     if (show_debug_)
         draw_debug_overlay();
+
+    // Recording indicator (always visible when recording)
+    if (recorder_.recording()) {
+        using namespace palette;
+        using namespace renderer;
+        // Blinking red dot
+        int sec = (int)recorder_.elapsed();
+        if (sec % 2 == 0) {
+            renderer_.rect_fill(4, 4, 6, 6, RED);
+        } else {
+            renderer_.rect_fill(4, 4, 6, 6, {180, 0, 0});
+        }
+        char rec_buf[32];
+        int mins = sec / 60, secs = sec % 60;
+        snprintf(rec_buf, sizeof(rec_buf), "REC %02d:%02d", mins, secs);
+        Font::draw_string(renderer_, 12, 3, rec_buf, RED);
+    }
 
     renderer_.end_frame();
 }
