@@ -22,12 +22,12 @@
 - [x] Chiptune audio quality — no input stream by default
 
 ## v0.4.0 — Polish
-- [ ] On-demand input stream — create PipeWire capture only when a DSP with inputs is loaded
-- [ ] MIDI learn — hold key combo, wiggle knob, auto-create binding
+- [x] On-demand input stream — create PipeWire capture only when a DSP with inputs is loaded
+- [x] MIDI learn — hold key combo, wiggle knob, auto-create binding
 - [ ] Key rebinding UI — replace "Coming soon" in Settings > INPUT
-- [ ] FFT for spectrum — replace O(n²) DFT with real FFT (kissfft or custom)
+- [x] FFT for spectrum — replace O(n²) DFT with real FFT (Cooley-Tukey radix-2)
 - [ ] Gamepad → slot param mapping — analog sticks control FX parameters
-- [ ] Slot param save in presets — snapshot per-slot parameter values from loaded DSP
+- [x] Slot param save in presets — snapshot per-slot parameter values from loaded DSP
 
 ## v1.0.0 — Production
 - [ ] VST3 plugin export — embed DOOM GUI as a plugin window in a DAW
@@ -35,7 +35,7 @@
 - [ ] Multi-engine — load and switch between multiple .dsp files
 - [ ] Per-slot CPU meter — show processing time per FX slot in debug overlay
 - [ ] Full documentation — man page, tutorial, example .dsp files
-- [x] Automated tests — unit tests for FX chain, presets, chiptune, renderer, input, Faust bridge (64 tests)
+- [x] Automated tests — unit tests for FX chain, presets, chiptune, renderer, input, Faust bridge, FFT (67 tests)
 
 ## Backlog
 - [ ] DOOM-themed preset files (.wad extension)
