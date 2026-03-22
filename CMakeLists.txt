@@ -67,6 +67,9 @@ set(SOURCES
     # Recording
     src/record/recorder.cpp
 
+    # Terminal (embedded OpenCode via libvterm + PTY)
+    src/terminal/terminal.cpp
+
     # UI Screens
     src/ui/main_menu.cpp
     src/ui/help_screen.cpp

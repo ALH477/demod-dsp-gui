@@ -380,8 +380,40 @@ void EditorScreen::update(const input::InputManager& input, float dt) {
         if (status_timer_ <= 0) status_msg_.clear();
     }
 
-    // Special keys via SDL
+    // F7 — toggle AI panel
     const uint8_t* keys = SDL_GetKeyboardState(nullptr);
+    static bool f7_prev = false;
+    if (keys[SDL_SCANCODE_F7] && !f7_prev) {
+        if (!ai_panel_visible_) {
+            // Open panel and start terminal
+            ai_panel_visible_ = true;
+            ai_panel_focused_ = true;
+            if (!terminal_.running()) {
+                std::string cwd = file_path_.empty()
+                    ? std::string(getenv("HOME") ? getenv("HOME") : "/")
+                    : file_path_.substr(0, file_path_.rfind('/'));
+                if (cwd.empty()) cwd = "/";
+                // Terminal size: 64 cols x 15 rows for bottom panel
+                terminal_.start(cwd, 15, 64);
+            }
+        } else if (ai_panel_focused_) {
+            // Focus back to editor
+            ai_panel_focused_ = false;
+        } else {
+            // Close panel
+            ai_panel_visible_ = false;
+            terminal_.stop();
+        }
+    }
+    f7_prev = keys[SDL_SCANCODE_F7];
+
+    // If terminal is focused, forward input to it
+    if (ai_panel_focused_ && terminal_.running()) {
+        handle_terminal_input(input);
+        return;
+    }
+
+    // Special keys via SDL (editor input)
 
     // Backspace
     if (input.pressed(Action::PARAM_RESET)) {
@@ -560,6 +592,9 @@ void EditorScreen::draw(Renderer& r) {
         }
     }
 
+    // ── AI Panel ─────────────────────────────────────────────────────
+    draw_ai_panel(r);
+
     // ── Footer bar ───────────────────────────────────────────────────
     int footer_y = H - 13;
     r.hline(0, W - 1, footer_y, CYAN_DARK);
@@ -574,6 +609,123 @@ void EditorScreen::draw(Renderer& r) {
     } else {
         Font::draw_string(r, 4, footer_y + 2,
             "F5:Compile  F2:Save  Esc:Back", MID_GRAY);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  TERMINAL INPUT HANDLING
+// ═══════════════════════════════════════════════════════════════════════
+
+void EditorScreen::handle_terminal_input(const input::InputManager& input) {
+    (void)input;
+    const uint8_t* keys = SDL_GetKeyboardState(nullptr);
+
+    // Special keys
+    static bool enter_prev = false, bs_prev = false, tab_prev = false;
+    static bool esc_prev = false, up_prev = false, down_prev = false;
+    static bool left_prev = false, right_prev = false;
+    static bool ctrl_c_prev = false;
+
+    if (keys[SDL_SCANCODE_RETURN] && !enter_prev)   terminal_.send_enter();
+    if (keys[SDL_SCANCODE_BACKSPACE] && !bs_prev)    terminal_.send_backspace();
+    if (keys[SDL_SCANCODE_TAB] && !tab_prev)         terminal_.send_tab();
+    if (keys[SDL_SCANCODE_ESCAPE] && !esc_prev)      terminal_.send_escape();
+    if (keys[SDL_SCANCODE_UP] && !up_prev)           terminal_.send_arrow_up();
+    if (keys[SDL_SCANCODE_DOWN] && !down_prev)       terminal_.send_arrow_down();
+    if (keys[SDL_SCANCODE_LEFT] && !left_prev)       terminal_.send_arrow_left();
+    if (keys[SDL_SCANCODE_RIGHT] && !right_prev)     terminal_.send_arrow_right();
+
+    // Ctrl+C
+    bool ctrl = keys[SDL_SCANCODE_LCTRL] || keys[SDL_SCANCODE_RCTRL];
+    if (ctrl && keys[SDL_SCANCODE_C] && !ctrl_c_prev) terminal_.send_ctrl_c();
+
+    enter_prev = keys[SDL_SCANCODE_RETURN];
+    bs_prev = keys[SDL_SCANCODE_BACKSPACE];
+    tab_prev = keys[SDL_SCANCODE_TAB];
+    esc_prev = keys[SDL_SCANCODE_ESCAPE];
+    up_prev = keys[SDL_SCANCODE_UP];
+    down_prev = keys[SDL_SCANCODE_DOWN];
+    left_prev = keys[SDL_SCANCODE_LEFT];
+    right_prev = keys[SDL_SCANCODE_RIGHT];
+    ctrl_c_prev = keys[SDL_SCANCODE_C];
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  AI PANEL RENDERING
+// ═══════════════════════════════════════════════════════════════════════
+
+void EditorScreen::draw_ai_panel(Renderer& r) const {
+    if (!ai_panel_visible_ || !terminal_.running()) return;
+
+    int W = r.fb_w(), H = r.fb_h();
+    (void)W;
+    int term_rows = terminal_.rows();
+    int term_cols = terminal_.cols();
+    int cell_w = GLYPH_W;
+    int cell_h = LINE_H;
+
+    // Panel dimensions
+    int panel_h = term_rows * cell_h + 2;
+    int panel_w = term_cols * cell_w + 4;
+    int panel_x = 0;
+    int panel_y = H - panel_h - 12;
+
+    // Panel background
+    Color border = ai_panel_focused_ ? CYAN : MID_GRAY;
+    r.rect_fill(panel_x, panel_y, panel_w, panel_h, {10, 10, 18});
+    r.rect(panel_x, panel_y, panel_w, panel_h, border);
+
+    // Panel header
+    r.rect_fill(panel_x + 1, panel_y + 1, panel_w - 2, cell_h, DARK_GRAY);
+    Font::draw_string(r, panel_x + 4, panel_y + 2, "OpenCode", CYAN);
+    if (ai_panel_focused_) {
+        Font::draw_right(r, panel_x + panel_w - 4, panel_y + 2, "[FOCUSED]", GREEN);
+    }
+
+    // Terminal grid
+    int grid_x = panel_x + 2;
+    int grid_y = panel_y + cell_h + 2;
+
+    for (int row = 0; row < term_rows; ++row) {
+        for (int col = 0; col < term_cols; ++col) {
+            const auto& cell = terminal_.get_cell(row, col);
+
+            uint8_t fg_r = cell.fg_r, fg_g = cell.fg_g, fg_b = cell.fg_b;
+            uint8_t bg_r = cell.bg_r, bg_g = cell.bg_g, bg_b = cell.bg_b;
+            if (cell.reverse) {
+                std::swap(fg_r, bg_r);
+                std::swap(fg_g, bg_g);
+                std::swap(fg_b, bg_b);
+            }
+
+            int cx = grid_x + col * cell_w;
+            int cy = grid_y + row * cell_h;
+
+            // Background
+            r.rect_fill(cx, cy, cell_w, cell_h, {bg_r, bg_g, bg_b});
+
+            // Character
+            if (cell.ch >= 32 && cell.ch < 127) {
+                Color fg(fg_r, fg_g, fg_b);
+                if (cell.bold) {
+                    fg = Color(std::min(255, (int)fg_r + 60),
+                               std::min(255, (int)fg_g + 60),
+                               std::min(255, (int)fg_b + 60));
+                }
+                char str[2] = {(char)cell.ch, 0};
+                Font::draw_string(r, cx, cy, str, fg);
+            }
+
+            // Cursor
+            if (row == terminal_.cursor_row() && col == terminal_.cursor_col()) {
+                r.rect_fill(cx, cy, cell_w, cell_h, {200, 200, 200, 128});
+            }
+
+            // Underline
+            if (cell.underline) {
+                r.hline(cx, cx + cell_w - 1, cy + cell_h - 1, {fg_r, fg_g, fg_b});
+            }
+        }
     }
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 #include "ui/screen.hpp"
+#include "terminal/terminal.hpp"
 #include <functional>
 #include <string>
 #include <vector>
@@ -12,7 +13,9 @@ public:
 
     std::string name() const override { return "EDITOR"; }
     std::string help_text() const override {
-        return "Typing | F5:Compile | F2:Save | Esc:Back";
+        return ai_panel_focused_
+            ? "Typing:Terminal  F7:Focus Editor  Ctrl+C:Interrupt"
+            : "Typing | F5:Compile | F2:Save | F7:AI Chat | Esc:Back";
     }
 
     void update(const input::InputManager& input, float dt) override;
@@ -52,6 +55,14 @@ private:
 
     std::function<bool(const std::string&)> on_compile_;
     std::function<void()> on_save_as_;
+
+    // AI Panel (embedded terminal running OpenCode)
+    terminal::Terminal terminal_;
+    bool ai_panel_visible_ = false;
+    bool ai_panel_focused_ = false;
+
+    void draw_ai_panel(renderer::Renderer& r) const;
+    void handle_terminal_input(const input::InputManager& input);
 
     // Editing
     void insert_char(char c);
