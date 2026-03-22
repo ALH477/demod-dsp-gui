@@ -91,13 +91,11 @@ namespace palette {
     constexpr Color YELLOW      { 255, 220,   0 };
     constexpr Color GREEN       {   0, 200,  60 };
     constexpr Color GREEN_DARK  {   0,  80,  25 };
-    constexpr Color SCANLINE    {   0,   0,   0, 60 };
     constexpr Color GLOW_CYAN   {   0, 255, 212, 30 };
     constexpr Color GLOW_VIOLET { 139,   0, 255, 20 };
     constexpr Color MENU_BG     {  12,  12,  16 };
     constexpr Color MENU_BORDER {  35,  35,  42 };
     constexpr Color MENU_HL     {  20,  50,  45 };
-    constexpr Color MENU_HL_BR  {   0, 120, 100 };
 }
 
 // ── Input actions ────────────────────────────────────────────────────

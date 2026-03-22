@@ -12,6 +12,7 @@ namespace demod::renderer {
 Renderer::Renderer() {
     fb_.resize(MAX_FB_WIDTH * MAX_FB_HEIGHT, 0);
     bloom_buf_.resize(MAX_FB_WIDTH * MAX_FB_HEIGHT, 0);
+    tmp_buf_.resize(MAX_FB_WIDTH * MAX_FB_HEIGHT, 0);
 }
 
 Renderer::~Renderer() { shutdown(); }
@@ -45,6 +46,7 @@ bool Renderer::set_resolution(int index) {
     res_idx_ = index;
     fb_w_ = RESOLUTIONS[index].width;
     fb_h_ = RESOLUTIONS[index].height;
+    vignette_dirty_ = true;
     SDL_SetWindowSize(window_,
         fb_w_ * RESOLUTIONS[index].scale,
         fb_h_ * RESOLUTIONS[index].scale);
@@ -199,14 +201,23 @@ void Renderer::dim_region(int x, int y, int w, int h, uint8_t alpha) {
 }
 
 void Renderer::dim_screen(uint8_t alpha) {
-    dim_region(0, 0, fb_w_, fb_h_, alpha);
+    // Integer-only fast path — darkens entire framebuffer
+    uint8_t inv_a = 255 - alpha;
+    int total = fb_w_ * fb_h_;
+    uint32_t* p = fb_.data();
+    for (int i = 0; i < total; ++i) {
+        uint32_t px = p[i];
+        uint8_t r = uint8_t(((px >> 16) & 0xFF) * inv_a / 255);
+        uint8_t g = uint8_t(((px >>  8) & 0xFF) * inv_a / 255);
+        uint8_t b = uint8_t(((px      ) & 0xFF) * inv_a / 255);
+        p[i] = (0xFFu << 24) | (r << 16) | (g << 8) | b;
+    }
 }
 
 // ── Post-processing ──────────────────────────────────────────────────
 
 void Renderer::apply_scanlines() {
     float keep = 1.0f - scanline_intensity;
-    int total = fb_w_ * fb_h_;
     for (int y = 0; y < fb_h_; y += 2) {
         uint32_t* row = fb_.data() + y * fb_w_;
         for (int x = 0; x < fb_w_; ++x) {
@@ -217,7 +228,6 @@ void Renderer::apply_scanlines() {
             row[x] = (0xFFu<<24)|(r<<16)|(g<<8)|b;
         }
     }
-    (void)total;
 }
 
 void Renderer::apply_bloom() {
@@ -244,33 +254,53 @@ void Renderer::apply_bloom() {
 }
 
 void Renderer::apply_vignette() {
-    float cx = fb_w_*0.5f, cy = fb_h_*0.5f;
-    for (int y = 0; y < fb_h_; ++y)
-        for (int x = 0; x < fb_w_; ++x) {
-            float dx = (x-cx)/cx, dy = (y-cy)/cy;
-            float vig = std::max(0.3f, 1.0f - std::pow(std::sqrt(dx*dx+dy*dy)*0.7f, 2.5f));
-            uint32_t& px = fb_[y*fb_w_+x];
-            uint8_t r = uint8_t(((px>>16)&0xFF)*vig);
-            uint8_t g = uint8_t(((px>> 8)&0xFF)*vig);
-            uint8_t b = uint8_t(((px    )&0xFF)*vig);
-            px = (0xFFu<<24)|(r<<16)|(g<<8)|b;
+    // Precompute vignette map if resolution changed
+    if (vignette_dirty_) {
+        vignette_map_.resize(fb_w_ * fb_h_);
+        float cx = fb_w_ * 0.5f, cy = fb_h_ * 0.5f;
+        for (int y = 0; y < fb_h_; ++y) {
+            for (int x = 0; x < fb_w_; ++x) {
+                float dx = (x - cx) / cx;
+                float dy = (y - cy) / cy;
+                float dist = std::sqrt(dx * dx + dy * dy);
+                float vig = std::max(0.3f, 1.0f - std::pow(dist * 0.7f, 2.5f));
+                vignette_map_[y * fb_w_ + x] = vig;
+            }
         }
+        vignette_dirty_ = false;
+    }
+
+    // Apply precomputed vignette
+    int total = fb_w_ * fb_h_;
+    uint32_t* p = fb_.data();
+    const float* v = vignette_map_.data();
+    for (int i = 0; i < total; ++i) {
+        uint32_t px = p[i];
+        float vig = v[i];
+        uint8_t r = uint8_t(((px >> 16) & 0xFF) * vig);
+        uint8_t g = uint8_t(((px >>  8) & 0xFF) * vig);
+        uint8_t b = uint8_t(((px      ) & 0xFF) * vig);
+        p[i] = (0xFFu << 24) | (r << 16) | (g << 8) | b;
+    }
 }
 
 void Renderer::apply_barrel() {
-    std::vector<uint32_t> tmp(fb_.begin(), fb_.begin() + fb_w_*fb_h_);
-    int total = fb_w_*fb_h_;
+    int total = fb_w_ * fb_h_;
+    std::memcpy(tmp_buf_.data(), fb_.data(), total * 4);
     std::memset(fb_.data(), 0, total * 4);
     float k = 0.15f;
-    for (int y = 0; y < fb_h_; ++y)
+    for (int y = 0; y < fb_h_; ++y) {
         for (int x = 0; x < fb_w_; ++x) {
-            float nx = 2.f*x/fb_w_-1, ny = 2.f*y/fb_h_-1;
-            float f = 1 + k*(nx*nx+ny*ny);
-            int px = int((nx*f+1)*0.5f*fb_w_);
-            int py = int((ny*f+1)*0.5f*fb_h_);
-            if (px>=0 && px<fb_w_ && py>=0 && py<fb_h_)
-                fb_[y*fb_w_+x] = tmp[py*fb_w_+px];
+            float nx = 2.f * x / fb_w_ - 1;
+            float ny = 2.f * y / fb_h_ - 1;
+            float r2 = nx * nx + ny * ny;
+            float f = 1.0f + k * r2;
+            int px = int((nx * f + 1) * 0.5f * fb_w_ + 0.5f);
+            int py = int((ny * f + 1) * 0.5f * fb_h_ + 0.5f);
+            if (px >= 0 && px < fb_w_ && py >= 0 && py < fb_h_)
+                fb_[y * fb_w_ + x] = tmp_buf_[py * fb_w_ + px];
         }
+    }
 }
 
 } // namespace demod::renderer

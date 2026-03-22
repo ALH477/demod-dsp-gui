@@ -205,11 +205,10 @@ int Font::measure(const std::string& text, int scale) {
 void Font::draw_glow(Renderer& r, int x, int y, const std::string& text,
                       Color c, Color glow, int scale) {
     // Draw glow layer (offset by 1px in each direction)
-    Color g = { glow.r, glow.g, glow.b, 80 };
-    draw_string(r, x - 1, y, text, g, scale);
-    draw_string(r, x + 1, y, text, g, scale);
-    draw_string(r, x, y - 1, text, g, scale);
-    draw_string(r, x, y + 1, text, g, scale);
+    draw_string(r, x - 1, y, text, glow, scale);
+    draw_string(r, x + 1, y, text, glow, scale);
+    draw_string(r, x, y - 1, text, glow, scale);
+    draw_string(r, x, y + 1, text, glow, scale);
 
     // Draw main text on top
     draw_string(r, x, y, text, c, scale);

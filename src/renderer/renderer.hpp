@@ -52,7 +52,7 @@ public:
     void gradient_v(int x, int y, int w, int h, Color top, Color bottom);
     void gradient_h(int x, int y, int w, int h, Color left, Color right);
 
-    // Fill a region with 50% alpha overlay
+    // Fill a region with alpha overlay (default 160 = ~63% darkening)
     void dim_region(int x, int y, int w, int h, uint8_t alpha = 160);
     void dim_screen(uint8_t alpha = 160);
 
@@ -79,7 +79,10 @@ private:
 
     std::vector<uint32_t> fb_;
     std::vector<uint32_t> bloom_buf_;
+    std::vector<uint32_t> tmp_buf_;  // Persistent temp for barrel distortion
+    std::vector<float>    vignette_map_;  // Precomputed vignette per-pixel
     bool fullscreen_ = false;
+    bool vignette_dirty_ = true;
 
     bool recreate_texture();
     void apply_scanlines();
